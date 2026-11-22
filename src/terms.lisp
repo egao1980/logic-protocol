@@ -113,17 +113,46 @@ Semantics (all arguments bound when evaluated):
        (= (length x) 3)
        (every #'logic-term-p (cdr x))))
 
+(defun %term-rank (x)
+  (cond ((integerp x) 0) ((stringp x) 1) (t 2)))
+
+(defun %symbol-package-name (s)
+  (let ((p (symbol-package s)))
+    (if p (package-name p) "")))
+
 (defun term< (a b)
   "The defined order on constants (see the file header)."
-  (declare (ignore a b))
-  (%logic0-pending 'term<))
+  (let ((ra (%term-rank a)) (rb (%term-rank b)))
+    (cond ((/= ra rb) (< ra rb))
+          ((= ra 0) (< a b))
+          ((= ra 1) (and (string< a b) t))
+          (t (let ((na (symbol-name a)) (nb (symbol-name b)))
+               (cond ((string< na nb) t)
+                     ((string< nb na) nil)
+                     (t (and (string< (%symbol-package-name a) (%symbol-package-name b))
+                             t))))))))
+
+(defun %terms< (a b)
+  "Lexicographic TERM< on two lists of terms; a proper prefix is smaller."
+  (loop
+    (cond ((null b) (return nil))
+          ((null a) (return t))
+          ((term< (car a) (car b)) (return t))
+          ((term< (car b) (car a)) (return nil))
+          (t (pop a) (pop b)))))
 
 (defun fact< (a b)
   "The defined order on facts (see the file header)."
-  (declare (ignore a b))
-  (%logic0-pending 'fact<))
+  (%terms< a b))
+
+(defun %dedupe (list)
+  "A fresh list of LIST without EQUAL duplicates, first occurrence kept."
+  (let ((seen (make-hash-table :test 'equal)) (out '()))
+    (dolist (x list (nreverse out))
+      (unless (gethash x seen)
+        (setf (gethash x seen) t)
+        (push x out)))))
 
 (defun sort-facts (facts)
   "A fresh list of FACTS without EQUAL duplicates, sorted by FACT<."
-  (declare (ignore facts))
-  (%logic0-pending 'sort-facts))
+  (stable-sort (%dedupe facts) #'fact<))

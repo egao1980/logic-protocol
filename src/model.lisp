@@ -59,8 +59,8 @@ protocol sorts them before handing a delta to the caller)."
 (defun delta-relations (delta)
   "The relations of the facts in DELTA, each once, sorted by TERM<. L3 maps
 them to the fragments it re-renders."
-  (declare (ignore delta))
-  (%logic0-pending 'delta-relations))
+  (sort (%dedupe (mapcar #'atom-relation (append (delta-added delta) (delta-removed delta))))
+        #'term<))
 
 (defclass proof ()
   ((fact :initarg :fact :reader proof-fact)
@@ -86,8 +86,13 @@ them to the fragments it re-renders."
 
 (defun proof-base-facts (proof)
   "The base facts at the leaves of PROOF, each once, sorted by FACT<."
-  (declare (ignore proof))
-  (%logic0-pending 'proof-base-facts))
+  (let ((out '()))
+    (labels ((walk (p)
+               (if (proof-base-p p)
+                   (push (proof-fact p) out)
+                   (mapc #'walk (proof-premises p)))))
+      (walk proof))
+    (sort-facts out)))
 
 (defclass why-not ()
   ((fact :initarg :fact :reader why-not-fact)

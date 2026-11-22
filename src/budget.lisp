@@ -56,8 +56,41 @@ duplicates allowed); CHARGE-BUDGET sorts them into LOGIC-ERROR-PARTIAL.")
 (defun make-budget-meter (designator operation)
   "A fresh meter for one OPERATION (:ADD-RULES, :UPDATE, :QUERY or :TICK)
 under the budget DESIGNATOR. The wall-clock limit starts now."
-  (declare (ignore designator operation))
-  (%logic0-pending 'make-budget-meter))
+  (let* ((budget (resolve-budget designator))
+         (meter (make-instance 'budget-meter :budget budget :operation operation)))
+    (setf (%meter-limit meter) (budget-steps budget)
+          (%meter-deadline meter) (%budget-deadline budget))
+    meter))
+
+(defun resolve-budget (designator)
+  "The LOGIC-BUDGET a budget designator (see the file header) stands for."
+  (etypecase designator
+    (null *logic-budget*)
+    (logic-budget designator)
+    ((integer 0) (make-budget :steps designator))
+    ((eql :unlimited) (make-budget))))
+
+(defun %budget-deadline (budget)
+  (let ((seconds (budget-seconds budget)))
+    (and seconds
+         (+ (get-internal-real-time)
+            (round (* seconds internal-time-units-per-second))))))
+
+(defun normalize-answers (answers variables)
+  "ANSWERS (binding alists, any order, duplicates allowed) projected onto
+VARIABLES, without duplicates, sorted by their values in VARIABLES order
+with TERM<."
+  (let ((projected (mapcar (lambda (a)
+                             (mapcar (lambda (v) (cons v (cdr (assoc v a)))) variables))
+                           answers)))
+    (stable-sort (%dedupe projected) #'%terms< :key (lambda (a) (mapcar #'cdr a)))))
+
+(defun %partial-answers (meter)
+  (let ((fn (budget-meter-partial-function meter)))
+    (when (and fn (eq (budget-meter-operation meter) :query))
+      (let ((answers (funcall fn)))
+        (normalize-answers answers (or (%meter-variables meter)
+                                       (mapcar #'car (first answers))))))))
 
 (defun charge-budget (meter &optional (steps 1))
   "Charge STEPS to METER. When the step count passes the limit, or the
@@ -66,5 +99,23 @@ OPERATION, PARTIAL) with a CONTINUE restart established here: CONTINUE adds
 one more full allowance of the original budget (steps and seconds, the new
 deadline counted from now) and returns, and the work goes on. It may be
 signalled again later. Returns NIL."
-  (declare (ignore meter steps))
-  (%logic0-pending 'charge-budget))
+  (incf (budget-meter-steps meter) steps)
+  (let ((limit (%meter-limit meter))
+        (deadline (%meter-deadline meter)))
+    (when (or (and limit (> (budget-meter-steps meter) limit))
+              (and deadline (> (get-internal-real-time) deadline)))
+      (restart-case
+          (error 'logic-budget-exceeded
+                 :budget (budget-meter-budget meter)
+                 :steps (budget-meter-steps meter)
+                 :operation (budget-meter-operation meter)
+                 :program (%meter-program meter)
+                 :partial (%partial-answers meter))
+        (continue ()
+          :report "Grant one more allowance of the budget and keep computing."
+          (let ((budget (budget-meter-budget meter)))
+            (when limit
+              (setf (%meter-limit meter)
+                    (max (+ limit (budget-steps budget)) (budget-meter-steps meter))))
+            (setf (%meter-deadline meter) (%budget-deadline budget)))))))
+  nil)
