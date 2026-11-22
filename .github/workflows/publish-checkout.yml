@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         system:
-          - canvas-backend-svg
+          - logic-protocol
     uses: egao1980/cl-repository/.github/workflows/publish-source.yml@main
     with:
       system: ${{ matrix.system }}
