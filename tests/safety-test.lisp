@@ -1,0 +1,68 @@
+(in-package #:logic-protocol/tests)
+
+(deftest-parametrize rule-safety
+    ((form unsafe)
+     ('(rule (path ?x ?y) :- (edge ?x ?y)) nil)
+     ('(rule (p ?x) :- (q ?y)) '(?x))
+     ('(rule (p ?b ?a) :- (q 1)) '(?b ?a))
+     ('(rule (p ?x)) '(?x))
+     ('(rule (p 1)) nil)
+     ('(rule (p ?x) :- (q ?x) (not (r ?y))) '(?y))
+     ('(rule (p ?x) :- (not (r ?x))) '(?x))
+     ('(rule (p ?x) :- (q ?x) (< ?x ?z)) '(?z))
+     ('(rule (p ?x) :- (q ?x) (glob ?pat ?x)) '(?pat))
+     ('(rule (p ?x) :- (q ?x) (not (glob "tmp*" ?x))) nil)
+     ('(rule (p ?y) :- (q ?x) (= ?y ?x)) nil)
+     ('(rule (p ?y) :- (= ?y 3)) nil)
+     ('(rule (p ?y) :- (= ?y ?z)) '(?y ?z))
+     ('(rule (p ?z) :- (= ?z ?y) (= ?y ?x) (q ?x)) nil)
+     ('(rule (p ?x) :- (q ?x) (/= ?x ?w)) '(?w))
+     ('(rule (next (p ?x)) :- (q ?y)) '(?x))
+     ('(rule (next (p ?x)) :- (q ?x)) nil)
+     ('(rule :- (not (q ?x))) '(?x))
+     ('(rule :- (q ?x) (not (r ?x))) nil)
+     ('(rule (choice nil nil (p ?x)) :- (q ?y)) '(?x))
+     ('(rule (choice 1 1 (c ?n :red) (c ?n :blue)) :- (node ?n)) nil))
+  (ok (equal (rule-unsafe-variables (parse-rule form)) unsafe)))
+
+(deftest pattern-safety
+  (ok (null (rule-unsafe-variables '((q ?x) (not (r ?x))))))
+  (ok (equal (rule-unsafe-variables '((q ?x) (not (r ?x ?y)))) '(?y)))
+  (ok (equal (rule-unsafe-variables '((< ?a 1))) '(?a))))
+
+(deftest add-rule-unsafe-signals
+  (let ((p (mock-program)))
+    (ok (signals (add-rule p '(rule (p ?x) :- (q ?y))) 'logic-unsafe-rule))
+    (ok (null (program-rules p)) "nothing was added")
+    (ok (handler-case (progn (add-rule p '(rule (p ?x) :- (q ?y))) nil)
+          (logic-unsafe-rule (c)
+            (and (typep (logic-error-rule c) 'rule)
+                 (equal (rule-form (logic-error-rule c)) '(rule (p ?x) :- (q ?y)))
+                 (equal (logic-error-variables c) '(?x))
+                 (eq (logic-error-program c) p)))))
+    (ok (signals-with-restarts (logic-unsafe-rule drop-rule)
+          (add-rule p '(rule (p ?x) :- (q ?y)))))))
+
+(deftest add-rules-drop-unsafe
+  (let ((p (mock-program)))
+    (handler-bind ((logic-unsafe-rule #'drop-rule))
+      (add-rules p '((rule (a ?x) :- (b ?x))
+                     (rule (p ?x) :- (q ?y))
+                     (rule (c ?x) :- (a ?x)))))
+    (ok (equal (mapcar #'rule-form (program-rules p))
+               '((rule (a ?x) :- (b ?x)) (rule (c ?x) :- (a ?x)))))
+    (ok (equal (calls (program-backend p))
+               '((:add-rules ((rule (a ?x) :- (b ?x)) (rule (c ?x) :- (a ?x))))))
+        "the accepted rules go to the backend in one call")))
+
+(deftest add-rules-drop-syntax-error
+  (let ((p (mock-program)))
+    (handler-bind ((logic-syntax-error #'drop-rule))
+      (add-rules p '((rule (a ?x) :- (b ?x)) (rule (p (f 1))))))
+    (ok (= (length (program-rules p)) 1))))
+
+(deftest add-rule-accepts-rule-objects
+  (let* ((p (mock-program))
+         (r (parse-rule '(rule (a ?x) :- (b ?x)) :name "first")))
+    (add-rule p r)
+    (ok (eq (first (program-rules p)) r))))
