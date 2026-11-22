@@ -1,7 +1,4 @@
 (defpackage #:logic-protocol/tests
-  (:use #:cl #:rove))
+  (:use #:cl #:rove #:logic-protocol))
 
 (in-package #:logic-protocol/tests)
-
-(deftest package-exists
-  (ok (find-package :logic-protocol)))
