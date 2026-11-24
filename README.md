@@ -3,7 +3,8 @@
 CLOS logic protocol for cl-stack (nickname `stack-logic`), slice L0 of Track L:
 
 - terms, atoms and facts as plain data (`(edge 1 2)`, logic variables `?x`), one defined order (`term<`, `fact<`) for every list returned;
-- rules `(rule HEAD :- BODY…)` with negation, built-ins (`=`, `/=`, `<`…, `glob`, `prefix`), Dedalus time-step heads `(next …)`, and the ASP shapes (`(rule :- …)`, `(choice LO HI …)`) parsed for later backends;
+- rules `(rule HEAD :- BODY…)` with negation, built-ins (`=`, `/=`, `<`…, `glob`, `prefix`), Dedalus time-step heads `(next …)`, and the ASP shapes (`(rule :- …)`, `(choice LO HI …)`, weak constraints `(weak W TERM…)` or `(weak (W L) TERM…)`) parsed for later backends;
+- weak constraints on any backend (0.2): `weak-instances` grounds weak rules against a program's model and returns the `(weight level . terms)` instances with their ground bodies, ready to compile to a SAT objective; `weak-cost` sums them per level (`:weak-constraints` in `backend-features` means the backend runs them itself);
 - range-restriction and stratification checks (`rule-unsafe-variables`, `stratify`);
 - programs: `make-program`, `add-rule(s)`, `assert-fact`, `retract-fact`, an incremental `update` returning a `delta` (added / removed facts of the model), `query` / `holds-p` with `:assume`, `explain` (proof tree or why-not trace), `tick`;
 - budgets on every operation, and CLHS 9 conditions with restarts: `logic-unsafe-rule`, `logic-unstratifiable` (`drop-rule`, `use-backend`), `logic-unsupported-rule`, `logic-budget-exceeded` (`continue`, `use-value`), `logic-no-backend`.

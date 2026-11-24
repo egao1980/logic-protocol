@@ -14,45 +14,109 @@
 ;;;   (rule (choice LO HI ATOM...) :- LIT...)
 ;;;                                      kind :CHOICE (ASP choice rule; LO and
 ;;;                                      HI are integers or NIL; one ATOM or more)
+;;;   (rule (weak COST TERM...) :- LIT...)
+;;;                                      kind :WEAK (ASP weak constraint; head
+;;;                                      NIL; at least one LIT). See below.
 ;;;
 ;;; HEAD is an atom (LOGIC-ATOM-P). A body LIT is an atom, a built-in
-;;; (BUILTIN-LITERAL-P), or (not X) where X is an atom or a built-in. NEXT
-;;; and CHOICE appear only in heads. Anything else signals LOGIC-SYNTAX-ERROR
-;;; with FORM = the whole rule form and a REASON string. The datalog backend
-;;; supports :NORMAL and :NEXT; :CONSTRAINT and :CHOICE are parsed so that an
-;;; ASP backend (L5) fits, and ADD-RULE signals LOGIC-UNSUPPORTED-RULE on a
-;;; backend that lacks them.
+;;; (BUILTIN-LITERAL-P), or (not X) where X is an atom or a built-in. NEXT,
+;;; CHOICE and WEAK appear only in heads (WEAK is a reserved name, so (weak …)
+;;; is never an atom). Anything else signals LOGIC-SYNTAX-ERROR with FORM = the
+;;; whole rule form and a REASON string. The datalog backend supports :NORMAL
+;;; and :NEXT; :CONSTRAINT, :CHOICE and :WEAK are parsed so that an ASP backend
+;;; (L5) fits, and ADD-RULE signals LOGIC-UNSUPPORTED-RULE on a backend that
+;;; lacks them.
+;;;
+;;; Weak constraints (since 0.2.0). (rule (weak COST TERM...) :- LIT...) is
+;;; clingo's  :~ LIT, ... . [W@L, TERM, ...]  : every instance of the body
+;;; that holds costs W at priority level L, and an optimal answer minimizes
+;;; the costs level by level, highest level first. The grammar:
+;;;
+;;;   weak-head = (weak COST TERM*)        ; WEAK by SYMBOL-NAME, any package
+;;;   COST      = W | (W L)
+;;;   W         = an integer | a variable  ; the weight
+;;;   L         = an integer               ; the level; 0 when COST is just W
+;;;   TERM      = a term (LOGIC-TERM-P)    ; constant or variable, zero or more
+;;;
+;;; So (weak 3 ?x) is [3@0, X], (weak (?c 2) ?x ?y) is [C@2, X, Y], (weak
+;;; (-1 1)) is [-1@1]; (weak 3 ?x) and (weak (3 0) ?x) parse to the same
+;;; weight, level and terms.
+;;; Weights and levels may be negative. A variable weight takes its value
+;;; from the body; a level is always written as an integer. Each of these
+;;; signals LOGIC-SYNTAX-ERROR (FORM = the whole rule form):
+;;;   - no COST: (weak);
+;;;   - a W that is not an integer or a variable: a string, a symbol
+;;;     constant, NIL, a float or ratio, a list;
+;;;   - a (W L) that is not a proper two-element list, or whose L is not an
+;;;     integer (a variable level included);
+;;;   - a TERM that is not a term (a list, NIL, a float), or an improper
+;;;     (weak …) list;
+;;;   - an empty body: (rule (weak 1)), (rule (weak 1) :-);
+;;;   - (weak …) anywhere but the head: in the body, inside NEXT or CHOICE.
+;;;
+;;; The parsed rule: RULE-KIND :WEAK, RULE-HEAD NIL, RULE-HEAD-ATOMS NIL,
+;;; RULE-BODY the literals, RULE-WEIGHT W, RULE-LEVEL L (0 when not written),
+;;; RULE-TERMS the TERMs as a list (NIL when there are none), RULE-CHOICE-
+;;; BOUNDS NIL, RULE-FORM the form as given. RULE-PROPERTIES is
+;;;   (:WEIGHT W :LEVEL L :TERMS TERMS . P)
+;;; where P is the caller's PROPERTIES plist with every :WEIGHT, :LEVEL and
+;;; :TERMS entry removed: the form is the source of truth, and parsing a weak
+;;; rule's RULE-FORM again with its own RULE-PROPERTIES gives the same
+;;; properties. Rules of the other kinds keep PROPERTIES exactly as given, and
+;;; their RULE-WEIGHT, RULE-LEVEL and RULE-TERMS are NIL.
+;;;
+;;; Instances (as defined here, and as WEAK-INSTANCES computes them against a
+;;; model): an answer A of the body gives the instance (W' L . TERMS'), W'
+;;; and TERMS' being W and TERMS under A. Instances are a set, as in clingo:
+;;; the same (W L . TERMS) from two answers, or from two weak rules, is one
+;;; instance and costs W once. Add a term to tell such cases apart.
 ;;;
 ;;; Safety (range restriction, RULE-UNSAFE-VARIABLES): start with the
 ;;; variables of the positive body atoms; then, repeatedly, for (= A B) in the
 ;;; body where one side is a constant or bound, the other side becomes bound.
 ;;; Every variable of the head (all head atoms of a choice rule, the inner
-;;; atom of NEXT), of a negated literal, and of a built-in other than = must
-;;; end up bound, and both sides of every = too. The unbound ones, in
-;;; first-occurrence order over the whole rule form, are the unsafe
-;;; variables.
+;;; atom of NEXT, the weight and the terms of a weak head), of a negated
+;;; literal, and of a built-in other than = must end up bound, and both sides
+;;; of every = too. The unbound ones, in first-occurrence order over the whole
+;;; rule form, are the unsafe variables. So a weak rule is safe exactly when
+;;; every variable of its weight and terms occurs in a positive body atom (or
+;;; is bound through =), like any head variable: (rule (weak ?w ?x) :- (p ?x))
+;;; is unsafe with (?W), and (rule (weak ?w ?x) :- (cost ?x ?w)) is safe.
 ;;;
 ;;; Stratification (STRATIFY): the dependency graph has an edge from each
 ;;; body relation to each head relation of the same rule, negative when the
 ;;; body literal is (not ATOM). Built-ins add no edges. Rules of kind :NEXT
 ;;; add no edges (time separates them: the body is read at t, the head is a
-;;; fact at t+1). :CONSTRAINT rules have no head and add no edges. A
-;;; negative edge inside a strongly connected component makes the program
-;;; unstratifiable.
+;;; fact at t+1). :CONSTRAINT and :WEAK rules have no head and add no edges
+;;; (the relations of their body atoms are still nodes), so negation in a
+;;; weak rule's body never makes a program unstratifiable. A negative edge
+;;; inside a strongly connected component makes the program unstratifiable.
 
 (defclass rule ()
   ((head :initarg :head :reader rule-head
          :documentation "An atom (:NORMAL), the inner atom (:NEXT), NIL
-(:CONSTRAINT) or the list of atoms (:CHOICE).")
+(:CONSTRAINT, :WEAK) or the list of atoms (:CHOICE).")
    (body :initarg :body :initform '() :reader rule-body
          :documentation "The literals as written (plain lists).")
-   (kind :initarg :kind :initform :normal :reader rule-kind)
+   (kind :initarg :kind :initform :normal :reader rule-kind
+         :documentation ":NORMAL, :NEXT, :CONSTRAINT, :CHOICE or :WEAK.")
    (choice-bounds :initarg :choice-bounds :initform nil :reader rule-choice-bounds
                   :documentation "(LO . HI) for :CHOICE, else NIL.")
+   (weight :initarg :weight :initform nil :reader rule-weight
+           :documentation "For :WEAK, the weight W of (weak COST TERM...): an
+integer or a variable. NIL for the other kinds.")
+   (level :initarg :level :initform nil :reader rule-level
+          :documentation "For :WEAK, the level L of (weak (W L) TERM...), an
+integer; 0 when COST is just W. NIL for the other kinds.")
+   (terms :initarg :terms :initform nil :reader rule-terms
+          :documentation "For :WEAK, the TERMs of (weak COST TERM...) as a list,
+possibly empty. NIL for the other kinds.")
    (name :initarg :name :initform nil :reader rule-name)
    (properties :initarg :properties :initform '() :reader rule-properties
                :documentation "A plist the caller owns (L1 keeps the effect,
-feedback and source rule here). The protocol never reads it.")
+feedback and source rule here). The protocol never reads it. For a :WEAK
+rule it starts with :WEIGHT W :LEVEL L :TERMS TERMS, followed by the
+caller's plist without those keys (see the file header).")
    (form :initarg :form :reader rule-form
          :documentation "The surface form PARSE-RULE read.")))
 
@@ -62,11 +126,11 @@ feedback and source rule here). The protocol never reads it.")
 
 (defun rule-head-atoms (rule)
   "The atoms RULE derives: one for :NORMAL and :NEXT, the choice atoms for
-:CHOICE, none for :CONSTRAINT."
+:CHOICE, none for :CONSTRAINT and :WEAK."
   (ecase (rule-kind rule)
     ((:normal :next) (list (rule-head rule)))
     (:choice (rule-head rule))
-    (:constraint '())))
+    ((:constraint :weak) '())))
 
 (defun not-literal-p (x)
   "Is X a list headed by NOT (by symbol name)?"
@@ -127,13 +191,61 @@ feedback and source rule here). The protocol never reads it.")
                    (unless (and atoms (every #'logic-atom-p atoms))
                      (fail "(choice LO HI ATOM...) needs at least one atom"))
                    (setf kind :choice head atoms bounds (cons lo hi))))
+                ((and (consp head-form) (named-p (car head-form) "WEAK"))
+                 (return-from %parse-rule
+                   (%parse-weak-rule form head-form body name properties program)))
                 (t (fail (format nil "~S is not a rule head" head-form)))))
         (make-instance 'rule :head head :body body :kind kind :choice-bounds bounds
                              :name name :properties properties :form form)))))
 
+(defun %parse-weak-rule (form head-form body name properties program)
+  "The :WEAK rule of FORM, whose head HEAD-FORM is a list headed by WEAK and
+whose BODY literals %PARSE-RULE has already checked: validate HEAD-FORM and
+BODY by the weak-constraint grammar (file header), then make the RULE with
+kind :WEAK, head NIL, the weight, level and terms, NAME, the properties the
+header defines from PROPERTIES, and FORM. Every violation signals
+LOGIC-SYNTAX-ERROR with FORM, a non-empty REASON string and PROGRAM."
+  (flet ((fail (reason)
+           (error 'logic-syntax-error :form form :reason reason :program program))
+         (weight-p (x)
+           (or (integerp x) (logic-variable-p x))))
+    (unless (proper-list-p head-form)
+      (fail "(weak COST TERM...) must be a proper list"))
+    (when (null (cdr head-form))
+      (fail "(weak COST TERM...) needs a COST: W or (W L)"))
+    (let ((cost (second head-form))
+          (terms (copy-list (cddr head-form))))
+      (multiple-value-bind (weight level)
+          (cond ((weight-p cost) (values cost 0))
+                ((and (consp cost) (proper-list-p cost) (= (length cost) 2)
+                      (weight-p (first cost)) (integerp (second cost)))
+                 (values (first cost) (second cost)))
+                (t (fail (format nil "~S is not a weak COST: W or (W L), W an integer ~
+                                      or a variable, L an integer"
+                                 cost))))
+        (dolist (term terms)
+          (unless (logic-term-p term)
+            (fail (format nil "~S is not a term (a constant or a variable)" term))))
+        (when (null body)
+          (fail "a weak constraint needs at least one body literal"))
+        (make-instance 'rule :kind :weak :head nil :body body
+                             :weight weight :level level :terms terms
+                             :name name :form form
+                             :properties (list* :weight weight :level level :terms terms
+                                                (%plist-without properties
+                                                                '(:weight :level :terms))))))))
+
+(defun %plist-without (plist keys)
+  "A fresh copy of PLIST without any entry whose key is in KEYS (every
+occurrence), the other entries in their order."
+  (loop for (key value) on plist by #'cddr
+        unless (member key keys)
+          nconc (list key value)))
+
 (defun parse-rule (form &key name properties)
   "Parse the surface FORM (see the file header) into a RULE with NAME and
-PROPERTIES. Signals LOGIC-SYNTAX-ERROR. Does not check safety."
+PROPERTIES (for a :WEAK rule, RULE-PROPERTIES adds :WEIGHT, :LEVEL and
+:TERMS in front). Signals LOGIC-SYNTAX-ERROR. Does not check safety."
   (%parse-rule form name properties nil))
 
 (defmacro rule (&rest parts)

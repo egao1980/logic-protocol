@@ -13,8 +13,10 @@
 ;;; - A FACT is a ground atom (no variables).
 ;;; - Relations are identified by the symbol (EQ). Atoms of one relation with
 ;;;   different argument counts never match each other.
-;;; - Reserved names, by SYMBOL-NAME in any package: NOT, NEXT, CHOICE, AND,
-;;;   RULE, =, /=, <, <=, >, >=, GLOB, PREFIX. They are never relations.
+;;; - Reserved names, by SYMBOL-NAME in any package: NOT, NEXT, CHOICE, WEAK,
+;;;   AND, RULE, =, /=, <, <=, >, >=, GLOB, PREFIX. They are never relations.
+;;;   (WEAK since 0.2.0: (weak …) is the head of a weak constraint, so a
+;;;   relation named WEAK is no longer an atom, in rules, facts or patterns.)
 ;;;
 ;;; Defined order (TERM<, FACT<), used for every list the protocol returns:
 ;;; integers < strings < symbols. Integers by <, strings by STRING<, symbols
@@ -24,7 +26,7 @@
 ;;; smaller.
 
 (defparameter +reserved-names+
-  '("NOT" "NEXT" "CHOICE" "AND" "RULE" "=" "/=" "<" "<=" ">" ">=" "GLOB" "PREFIX"))
+  '("NOT" "NEXT" "CHOICE" "WEAK" "AND" "RULE" "=" "/=" "<" "<=" ">" ">=" "GLOB" "PREFIX"))
 
 (defparameter +builtin-names+
   '("=" "/=" "<" "<=" ">" ">=" "GLOB" "PREFIX"))

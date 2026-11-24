@@ -71,14 +71,16 @@ them without duplicates."
   (%dedupe facts))
 
 (defun %rule-feature (backend rule)
-  "The feature BACKEND lacks for RULE, or NIL."
+  "The feature BACKEND lacks for RULE, or NIL. The kind's feature is checked
+first (:WEAK needs :WEAK-CONSTRAINTS), then negation."
   (let ((features (backend-features backend)))
     (flet ((lacks (f) (not (member f features))))
       (or (ecase (rule-kind rule)
             (:normal nil)
             (:next (and (lacks :time-step) :time-step))
             (:choice (and (lacks :choice) :choice))
-            (:constraint (and (lacks :constraint) :constraint)))
+            (:constraint (and (lacks :constraint) :constraint))
+            (:weak (and (lacks :weak-constraints) :weak-constraints)))
           (and (some #'not-literal-p (rule-body rule))
                (lacks :stratified-negation)
                (lacks :unstratified-negation)
@@ -196,8 +198,9 @@ restart that takes the backend to use."
 (defun add-rules (program rules &key budget)
   "Add RULES (surface forms or RULE objects) in order. For each rule:
 PARSE-RULE when it is a form (LOGIC-SYNTAX-ERROR); a rule kind the backend
-lacks (:NEXT needs :TIME-STEP, :CHOICE and :CONSTRAINT their own keyword, a
-(not …) literal :STRATIFIED-NEGATION or :UNSTRATIFIED-NEGATION) signals
+lacks (:NEXT needs :TIME-STEP, :CHOICE and :CONSTRAINT their own keyword,
+:WEAK :WEAK-CONSTRAINTS, a (not …) literal :STRATIFIED-NEGATION or
+:UNSTRATIFIED-NEGATION; the kind is checked before negation) signals
 LOGIC-UNSUPPORTED-RULE; RULE-UNSAFE-VARIABLES non-NIL signals
 LOGIC-UNSAFE-RULE; then, unless the backend has :UNSTRATIFIED-NEGATION,
 STRATIFY over the accepted rules plus this one, which may signal
