@@ -80,7 +80,7 @@ first (:WEAK needs :WEAK-CONSTRAINTS), then negation."
             (:next (and (lacks :time-step) :time-step))
             (:choice (and (lacks :choice) :choice))
             (:constraint (and (lacks :constraint) :constraint))
-            (:weak (%weak-pending '%rule-feature)))
+            (:weak (and (lacks :weak-constraints) :weak-constraints)))
           (and (some #'not-literal-p (rule-body rule))
                (lacks :stratified-negation)
                (lacks :unstratified-negation)

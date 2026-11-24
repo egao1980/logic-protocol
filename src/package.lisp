@@ -43,10 +43,3 @@
    #:query #:holds-p #:explain #:tick #:program-facts #:program-base-facts
    ;; weak constraints (weak.lisp)
    #:weak-instances #:weak-cost))
-
-(in-package #:logic-protocol)
-
-(defun %weak-pending (name)
-  "Contract stub for the :WEAK rule kind (issue #3). Every call is replaced by
-the implementation, then this function is deleted."
-  (error "logic-protocol :weak pending: ~A" name))

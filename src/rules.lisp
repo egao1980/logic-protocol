@@ -130,8 +130,7 @@ caller's plist without those keys (see the file header).")
   (ecase (rule-kind rule)
     ((:normal :next) (list (rule-head rule)))
     (:choice (rule-head rule))
-    (:constraint '())
-    (:weak (%weak-pending 'rule-head-atoms))))
+    ((:constraint :weak) '())))
 
 (defun not-literal-p (x)
   "Is X a list headed by NOT (by symbol name)?"
@@ -206,8 +205,42 @@ BODY by the weak-constraint grammar (file header), then make the RULE with
 kind :WEAK, head NIL, the weight, level and terms, NAME, the properties the
 header defines from PROPERTIES, and FORM. Every violation signals
 LOGIC-SYNTAX-ERROR with FORM, a non-empty REASON string and PROGRAM."
-  (declare (ignorable form head-form body name properties program))
-  (%weak-pending '%parse-weak-rule))
+  (flet ((fail (reason)
+           (error 'logic-syntax-error :form form :reason reason :program program))
+         (weight-p (x)
+           (or (integerp x) (logic-variable-p x))))
+    (unless (proper-list-p head-form)
+      (fail "(weak COST TERM...) must be a proper list"))
+    (when (null (cdr head-form))
+      (fail "(weak COST TERM...) needs a COST: W or (W L)"))
+    (let ((cost (second head-form))
+          (terms (copy-list (cddr head-form))))
+      (multiple-value-bind (weight level)
+          (cond ((weight-p cost) (values cost 0))
+                ((and (consp cost) (proper-list-p cost) (= (length cost) 2)
+                      (weight-p (first cost)) (integerp (second cost)))
+                 (values (first cost) (second cost)))
+                (t (fail (format nil "~S is not a weak COST: W or (W L), W an integer ~
+                                      or a variable, L an integer"
+                                 cost))))
+        (dolist (term terms)
+          (unless (logic-term-p term)
+            (fail (format nil "~S is not a term (a constant or a variable)" term))))
+        (when (null body)
+          (fail "a weak constraint needs at least one body literal"))
+        (make-instance 'rule :kind :weak :head nil :body body
+                             :weight weight :level level :terms terms
+                             :name name :form form
+                             :properties (list* :weight weight :level level :terms terms
+                                                (%plist-without properties
+                                                                '(:weight :level :terms))))))))
+
+(defun %plist-without (plist keys)
+  "A fresh copy of PLIST without any entry whose key is in KEYS (every
+occurrence), the other entries in their order."
+  (loop for (key value) on plist by #'cddr
+        unless (member key keys)
+          nconc (list key value)))
 
 (defun parse-rule (form &key name properties)
   "Parse the surface FORM (see the file header) into a RULE with NAME and
