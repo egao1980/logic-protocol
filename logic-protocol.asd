@@ -1,5 +1,5 @@
 (defsystem "logic-protocol"
-  :version "0.1.0"
+  :version "0.2.0"
   :description "CLOS logic protocol for cl-stack: facts, rules, queries, incremental update, proofs (Track L)"
   :author "egao1980"
   :license "MIT"
@@ -13,11 +13,12 @@
                (:file "model")
                (:file "budget")
                (:file "backend")
-               (:file "program"))
+               (:file "program")
+               (:file "weak"))
   :in-order-to ((test-op (test-op "logic-protocol/tests"))))
 
 (defsystem "logic-protocol/tests"
-  :description "Protocol tests: terms, rule syntax, safety, stratification, restarts, budgets, normalization (mock backend)"
+  :description "Protocol tests: terms, rule syntax, safety, stratification, restarts, budgets, normalization, weak constraints (mock backend)"
   :depends-on ("logic-protocol" "rove")
   :pathname "tests"
   :serial t
@@ -29,7 +30,8 @@
                (:file "stratify-test")
                (:file "backend-test")
                (:file "budget-test")
-               (:file "model-test"))
+               (:file "model-test")
+               (:file "weak-test"))
   :perform (test-op (o c)
              (unless (symbol-call :rove :run c)
                (error "tests failed for ~A" (component-name c)))))
@@ -50,4 +52,5 @@
                (:file "time-step-test")
                (:file "ui-form-test")
                (:file "policy-test")
-               (:file "determinism-test")))
+               (:file "determinism-test")
+               (:file "weak-test")))

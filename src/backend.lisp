@@ -26,6 +26,9 @@
 ;;;                          then skips the stratification check
 ;;;   :TIME-STEP             :NEXT rules and TICK
 ;;;   :CHOICE, :CONSTRAINT   ASP rule kinds (L5)
+;;;   :WEAK-CONSTRAINTS      :WEAK rules (ASP weak constraints, L5). A
+;;;                          backend without it still serves WEAK-INSTANCES,
+;;;                          which only queries the model (weak.lisp)
 ;;;   :INCREMENTAL           UPDATE costs in proportion to the change, not
 ;;;                          to the whole model (informational)
 

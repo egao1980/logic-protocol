@@ -10,6 +10,7 @@
    ;; rules (rules.lisp)
    #:rule #:parse-rule #:rule-head #:rule-body #:rule-kind
    #:rule-choice-bounds #:rule-name #:rule-properties #:rule-form
+   #:rule-weight #:rule-level #:rule-terms
    #:rule-head-atoms #:rule-unsafe-variables #:stratify
    ;; model (model.lisp)
    #:delta #:make-delta #:delta-added #:delta-removed #:delta-empty-p #:delta-relations
@@ -39,7 +40,13 @@
    ;; programs (program.lisp)
    #:program #:make-program #:program-backend #:program-state #:program-rules #:program-time
    #:add-rule #:add-rules #:assert-fact #:retract-fact #:update
-   #:query #:holds-p #:explain #:tick #:program-facts #:program-base-facts))
+   #:query #:holds-p #:explain #:tick #:program-facts #:program-base-facts
+   ;; weak constraints (weak.lisp)
+   #:weak-instances #:weak-cost))
 
 (in-package #:logic-protocol)
 
+(defun %weak-pending (name)
+  "Contract stub for the :WEAK rule kind (issue #3). Every call is replaced by
+the implementation, then this function is deleted."
+  (error "logic-protocol :weak pending: ~A" name))

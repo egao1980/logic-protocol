@@ -8,16 +8,20 @@
 ;;;   DROP-RULE    ADD-RULE / ADD-RULES, around each rule, for LOGIC-SYNTAX-ERROR,
 ;;;                LOGIC-UNSAFE-RULE, LOGIC-UNSTRATIFIABLE and
 ;;;                LOGIC-UNSUPPORTED-RULE: leave that rule out and go on with
-;;;                the rest of the list.
+;;;                the rest of the list. WEAK-INSTANCES, around each rule, for
+;;;                LOGIC-SYNTAX-ERROR and LOGIC-UNSAFE-RULE: the same.
 ;;;   USE-BACKEND  (backend) ADD-RULE / ADD-RULES for LOGIC-UNSTRATIFIABLE and
 ;;;                LOGIC-UNSUPPORTED-RULE: move the program to BACKEND (its
 ;;;                rules and base facts are re-added there), then retry the
 ;;;                rule. MAKE-PROGRAM for LOGIC-NO-BACKEND: use BACKEND.
 ;;;   CONTINUE     CHARGE-BUDGET, at the signal point, for LOGIC-BUDGET-EXCEEDED:
 ;;;                raise the limit once (one more full allowance of the
-;;;                original budget) and keep computing.
+;;;                original budget) and keep computing. WEAK-INSTANCES, at the
+;;;                signal point, for the LOGIC-SYNTAX-ERROR of an instance
+;;;                whose weight is not an integer: skip that instance.
 ;;;   USE-VALUE    (value) every budgeted front function (ADD-RULE(S), UPDATE,
-;;;                ASSERT-FACT, RETRACT-FACT, QUERY, HOLDS-P, TICK), for
+;;;                ASSERT-FACT, RETRACT-FACT, QUERY, HOLDS-P, TICK,
+;;;                WEAK-INSTANCES), for
 ;;;                LOGIC-BUDGET-EXCEEDED: abandon the operation, leave the
 ;;;                program exactly as it was before the call, and return VALUE
 ;;;                from the front function. LOGIC-ERROR-PARTIAL is a ready
